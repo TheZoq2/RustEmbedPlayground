@@ -1,4 +1,4 @@
-[http://www.st.com/content/ccc/resource/technical/document/reference_manual/4a/19/6e/18/9d/92/43/32/DM00043574.pdf/files/DM00043574.pdf/jcr:content/translations/en.DM00043574.pdf#%5B%7B%22num%22%3A299%2C%22gen%22%3A0%7D%2C%7B%22name%22%3A%22XYZ%22%7D%2C67%2C338%2Cnull%5D](manual link)
+[Manual link](http://www.st.com/content/ccc/resource/technical/document/reference_manual/4a/19/6e/18/9d/92/43/32/DM00043574.pdf/files/DM00043574.pdf/jcr:content/translations/en.DM00043574.pdf#%5B%7B%22num%22%3A299%2C%22gen%22%3A0%7D%2C%7B%22name%22%3A%22XYZ%22%7D%2C67%2C338%2Cnull%5D)
 
 #Enabeling GPIO pins:
 GPIO pins must be enabeled in 2 steps. The first is to change the correct peripheral 
