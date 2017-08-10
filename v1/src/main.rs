@@ -121,13 +121,13 @@ pub fn main() -> ! {
     iprintln!("You are yolo");
 
     set_h_bridge_state(HBridgeState::Enabled);
-    loop 
+    loop
     {
         f3::delay::ms(half_period);
         set_north_led(true);
         set_h_bridge_direction(HBridgeDirection::Backward);
         f3::delay::ms(half_period);
-        set_south_led(true);
+        //set_south_led(true);
         set_h_bridge_direction(HBridgeDirection::Forward);
     }
 }
