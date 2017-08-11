@@ -21,23 +21,17 @@ app! {
     tasks: {
         SYS_TICK: {
             path: sys_tick,
-            resources: [GPIOC, ON],
+            resources: [GPIOE, ON],
         },
     }
 }
 
 fn init(p: init::Peripherals, r: init::Resources) {
-    r.ON;
-
-
     // Power up gpioc
-    p.RCC.apb2enr.modify(|_, w| w.iopcen().enabled());
+    p.RCC.ahbenr.modify(|_, w| w.iopeen().enabled());
 
-    // Configure pc13 as an output
-    p.GPIOC.bsrr.write(|w| w.bs13().set());
-    p.GPIOC
-        .crh
-        .modify(|_, w| w.mode13().output().cnf13().push());
+    // Enable gpoie15
+    p.GPIOE.moder.modify(|_, w| w.moder15().output());
 
     // configure the system timer to generate one interrupt every second
     p.SYST.set_clock_source(SystClkSource::Core);
@@ -55,12 +49,13 @@ fn idle() -> ! {
 
 fn sys_tick(_t: &mut Threshold, r: SYS_TICK::Resources)
 {
-    **r.ON = !r.ON;
+    **r.ON = !**r.ON;
 
     if **r.ON {
-        r.GPIOC.bsrr.write(|w| w.bs13().set());
+        //r.GPIOC.bsrr.write(|w| w.bs13().set());
+        r.GPIOE.odr.modify(|_, w| w.odr15().set_bit())
     }
     else {
-        r.GPIOC.bsrr.write(|w| w.br13().reset());
+        r.GPIOE.odr.modify(|_, w| w.odr15().clear_bit())
     }
 }

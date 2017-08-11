@@ -1,10 +1,10 @@
 [package]
-authors = ["Jorge Aparicio <jorge@japaric.io>"]
+authors = ["Frans Skarman"]
 categories = ["embedded", "no-std"]
 description = "A template for building applications for ARM Cortex-M microcontrollers"
 keywords = ["arm", "cortex-m", "template"]
 license = "MIT OR Apache-2.0"
-name = "cortex-m-quickstart"
+name = "cortex-m-playground"
 repository = "https://github.com/japaric/cortex-m-quickstart"
 version = "0.2.1"
 
@@ -18,6 +18,7 @@ features = ["abort-on-panic"]
 version = "0.3.3"
 
 [dependencies.stm32f30x]
+features = ["rt"]
 version = "0.5.1"
 
 [profile.release]
