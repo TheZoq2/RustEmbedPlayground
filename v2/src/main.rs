@@ -11,12 +11,15 @@ extern crate stm32f30x;
 use cortex_m::peripheral::SystClkSource;
 use rtfm::{app, Threshold};
 
+mod pwm;
+
 app! {
     device: stm32f30x,
 
     resources: {
         static ON: bool = false;
         static ON2: bool = false;
+        static PWM: Option<pwm::Pwm> = None;
     },
 
     tasks: {
@@ -26,7 +29,7 @@ app! {
         },
         TIM7: {
             path: sys_tim7,
-            resources: [GPIOE, ON2, TIM7]
+            resources: [GPIOE, ON2, TIM7, PWM]
         }
     }
 }
@@ -66,6 +69,12 @@ fn init(p: init::Peripherals, r: init::Resources) {
 
     // Enable interrupts and clock for timer7
     p.TIM7.cr1.modify(|_, w| w.cen().enabled());
+
+    let mut pwm = pwm::Pwm::new(2500);
+    pwm.set_channel(0, 1500);
+    pwm.set_channel(2, 1000);
+    pwm.set_channel(1, 1000);
+    **r.PWM = Some(pwm);
 }
 
 fn idle() -> ! {
