@@ -63,7 +63,7 @@ pub struct ActivePwm {
 }
 
 impl ActivePwm {
-    pub fn new(pwm: Pwm) -> ActivePwm {
+    pub fn new(pwm: &Pwm) -> ActivePwm {
         let mut setpoints = [(0,0); PWM_CHANNELS];
         let mut last_time = 0;
 
@@ -75,15 +75,19 @@ impl ActivePwm {
         ActivePwm {
             setpoints,
             end_wait: pwm.pulse_interval - last_time,
-            current_index: PWM_CHANNELS
+            current_index: 0
         }
+    }
+
+    pub fn get_current_sleep(&self) -> u16 {
+        self.setpoints[self.current_index].1
     }
 
     pub fn on_timer_tick(&mut self) -> TimerTickResult {
         let command = if self.current_index == PWM_CHANNELS {
             self.current_index = 0;
 
-            TimerTickCommand::AllOn
+            TimerTickCommand::Done
         }
         else {
             let mut channels_to_turn_off = [0; PWM_CHANNELS];
@@ -95,6 +99,7 @@ impl ActivePwm {
             while self.current_index < PWM_CHANNELS && self.setpoints[self.current_index].1 == 0 {
                 channels_to_turn_off[off_amount] = self.setpoints[self.current_index].0;
                 off_amount += 1;
+                self.current_index += 1;
             }
 
             TimerTickCommand::TurnOff(off_amount, channels_to_turn_off)
@@ -116,7 +121,7 @@ impl ActivePwm {
 
 pub enum TimerTickCommand {
     /// All channels should go high
-    AllOn,
+    Done,
     /// The following `n` channels should be turned off
     TurnOff(usize, [usize; PWM_CHANNELS])
 }

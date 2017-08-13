@@ -17,19 +17,19 @@ app! {
     device: stm32f30x,
 
     resources: {
-        static ON: bool = false;
-        static ON2: bool = false;
+        static STATE: u8 = 0;
         static PWM: Option<pwm::Pwm> = None;
+        static ACTIVE_PWM: Option<pwm::ActivePwm> = None;
     },
 
     tasks: {
         SYS_TICK: {
             path: sys_tick,
-            resources: [GPIOE, ON],
+            resources: [PWM, GPIOE, STATE],
         },
         TIM7: {
             path: sys_tim7,
-            resources: [GPIOE, ON2, TIM7, PWM]
+            resources: [GPIOE, TIM7, PWM, ACTIVE_PWM]
         }
     }
 }
@@ -58,23 +58,30 @@ fn init(p: init::Peripherals, r: init::Resources) {
 
 
     //Power up timer 7
-    p.RCC.apb1enr.write(|w| w.tim7en().enabled());
+    p.RCC.apb1enr.modify(|_, w| w.tim7en().enabled());
 
-    p.TIM7.dier.write(|w| w.uie().set_bit());
+    p.TIM7.dier.modify(|_, w| w.uie().set_bit());
 
-    // Make the counter count at 1kHz
-    p.TIM7.psc.write(|w| w.psc().bits(7999));
+    // Make the counter count at 1 mHz
+    p.TIM7.psc.modify(|_, w| w.psc().bits(7));
     //Reload every half second
-    p.TIM7.arr.write(|w| w.arr().bits(500));
+    //p.TIM7.arr.modify(|_, w| w.arr().bits(5_000_000 as u16));
 
     // Enable interrupts and clock for timer7
     p.TIM7.cr1.modify(|_, w| w.cen().enabled());
 
-    let mut pwm = pwm::Pwm::new(2500);
-    pwm.set_channel(0, 1500);
-    pwm.set_channel(2, 1000);
-    pwm.set_channel(1, 1000);
-    **r.PWM = Some(pwm);
+    **r.PWM = {
+        let mut pwm = pwm::Pwm::new(2500);
+
+        pwm.set_channel(2, 20);
+        pwm.set_channel(1, 2000);
+        pwm.set_channel(0, 700);
+
+        Some(pwm)
+    };
+
+    // Start the pwm in one ms
+    p.TIM7.arr.modify(|_, w| w.arr().bits(1000));
 }
 
 fn idle() -> ! {
@@ -85,46 +92,113 @@ fn idle() -> ! {
 
 
 fn sys_tick(_t: &mut Threshold, r: SYS_TICK::Resources) {
-    **r.ON = !**r.ON;
+    **r.STATE += 1;
 
-    if **r.ON {
+    if **r.STATE % 2 == 0 {
         r.GPIOE.odr.modify(|_, w| {
             w.odr12().set_bit()
                 .odr13().set_bit()
                 .odr14().set_bit()
                 .odr15().set_bit()
-        })
-    }
-    else {
+        });
+
+        match **r.PWM {
+            Some(ref mut pwm) => {
+                pwm.set_channel(1, 1000)
+            },
+            None => {}
+        }
+    } else {
         r.GPIOE.odr.modify(|_, w| {
             w.odr12().clear_bit()
                 .odr13().clear_bit()
                 .odr14().clear_bit()
                 .odr15().clear_bit()
-        })
+        });
+        match **r.PWM {
+            Some(ref mut pwm) => {
+                pwm.set_channel(1, 2000)
+            },
+            None => {}
+        }
+    }
+
+    if **r.STATE % 3 == 1 {
+        match **r.PWM {
+            Some(ref mut pwm) => {
+                pwm.set_channel(0, 1200)
+            },
+            None => {}
+        }
+    }
+    else {
+        match **r.PWM {
+            Some(ref mut pwm) => {
+                pwm.set_channel(0, 1800)
+            },
+            None => {}
+        }
     }
 }
 
-fn sys_tim7(_t: &mut Threshold, r: TIM7::Resources)
-{
-    r.TIM7.sr.write(|w| w.uif().clear_bit());
+fn sys_tim7(_t: &mut Threshold, r: TIM7::Resources) {
+    // Clear the interrupt
+    r.TIM7.sr.modify(|_, w| w.uif().clear_bit());
 
-    **r.ON2 = !**r.ON2;
+    let done = match **r.ACTIVE_PWM {
+        Some(ref mut active_pwm) => {
+            let tick_result = active_pwm.on_timer_tick();
 
-    if **r.ON2 {
-        r.GPIOE.odr.modify(|_, w| {
-            w.odr8().set_bit()
-                .odr9().set_bit()
-                .odr10().set_bit()
-                .odr11().set_bit()
-        })
-    }
-    else {
-        r.GPIOE.odr.modify(|_, w| {
-            w.odr8().clear_bit()
-                .odr9().clear_bit()
-                .odr10().clear_bit()
-                .odr11().clear_bit()
-        })
+            // Set the timer to pause on the next milestone
+            r.TIM7.arr.modify(|_, w| w.arr().bits(tick_result.next_step));
+            // Reset the counter
+            r.TIM7.cnt.reset();
+
+            // Perform the actual pwm. Return true if it is done
+            match tick_result.command {
+                pwm::TimerTickCommand::Done => {
+                    true
+                },
+                pwm::TimerTickCommand::TurnOff(amount, channels) => {
+                    for i in 0..amount {
+                        match channels[i] {
+                            0 => r.GPIOE.odr.modify(|_, w| w.odr8().clear_bit()),
+                            1 => r.GPIOE.odr.modify(|_, w| w.odr9().clear_bit()),
+                            2 => r.GPIOE.odr.modify(|_, w| w.odr10().clear_bit()),
+                            _ => {}
+                        }
+                    }
+
+                    false
+                }
+            }
+        },
+        None => {true}
+    };
+
+    // If this PWM cycle is done, we recreate it from the new commands
+    if done == true {
+        match **r.PWM {
+            Some(ref pwm) => { 
+                let active_pwm = pwm::ActivePwm::new(&pwm);
+
+                // Set the timer to pause on the next milestone
+                r.TIM7.arr.modify(|_, w| w.arr().bits(active_pwm.get_current_sleep()));
+                // Reset the counter
+                r.TIM7.cnt.reset();
+
+                **r.ACTIVE_PWM = Some(active_pwm);
+
+                // Activate all the outputs
+                r.GPIOE.odr.modify(|_, w| {
+                    w.odr8().set_bit()
+                        .odr9().set_bit()
+                        .odr10().set_bit()
+                })
+            }
+            None => {
+                **r.ACTIVE_PWM = None
+            }
+        }
     }
 }
