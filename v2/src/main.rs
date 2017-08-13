@@ -25,18 +25,30 @@ app! {
     tasks: {
         SYS_TICK: {
             path: sys_tick,
-            resources: [PWM, GPIOE, STATE],
+            resources: [GPIOA, PWM, GPIOE, STATE],
         },
         TIM7: {
             path: sys_tim7,
             resources: [GPIOE, TIM7, PWM, ACTIVE_PWM]
+        },
+        EXTI1: {
+            path: sys_exti1,
+            resources: [PWM]
         }
     }
 }
 
 fn init(p: init::Peripherals, r: init::Resources) {
-    // Power up gpioc
-    p.RCC.ahbenr.modify(|_, w| w.iopeen().enabled());
+    // Power up gpioa and gpioe
+    p.RCC.ahbenr.modify(|_, w| {
+        w.iopeen().enabled()
+            .iopaen().enabled()
+    });
+
+    // Configure port A8 as an input
+    p.GPIOA.moder.modify(|_, w| {
+        w.moder8().input()
+    });
 
     // Enable gpoie15
     p.GPIOE.moder.modify(|_, w|
@@ -101,13 +113,6 @@ fn sys_tick(_t: &mut Threshold, r: SYS_TICK::Resources) {
                 .odr14().set_bit()
                 .odr15().set_bit()
         });
-
-        match **r.PWM {
-            Some(ref mut pwm) => {
-                pwm.set_channel(1, 1000)
-            },
-            None => {}
-        }
     } else {
         r.GPIOE.odr.modify(|_, w| {
             w.odr12().clear_bit()
@@ -115,12 +120,6 @@ fn sys_tick(_t: &mut Threshold, r: SYS_TICK::Resources) {
                 .odr14().clear_bit()
                 .odr15().clear_bit()
         });
-        match **r.PWM {
-            Some(ref mut pwm) => {
-                pwm.set_channel(1, 2000)
-            },
-            None => {}
-        }
     }
 
     if **r.STATE % 3 == 1 {
@@ -135,6 +134,25 @@ fn sys_tick(_t: &mut Threshold, r: SYS_TICK::Resources) {
         match **r.PWM {
             Some(ref mut pwm) => {
                 pwm.set_channel(0, 1800)
+            },
+            None => {}
+        }
+    }
+
+
+    // Read gpioa8
+    if r.GPIOA.idr.read().idr8().bit() {
+        match **r.PWM {
+            Some(ref mut pwm) => {
+                pwm.set_channel(1, 1000)
+            },
+            None => {}
+        }
+    }
+    else {
+        match **r.PWM {
+            Some(ref mut pwm) => {
+                pwm.set_channel(1, 2000)
             },
             None => {}
         }
@@ -200,5 +218,12 @@ fn sys_tim7(_t: &mut Threshold, r: TIM7::Resources) {
                 **r.ACTIVE_PWM = None
             }
         }
+    }
+}
+
+fn sys_exti1(_t: &mut Threshold, r: EXTI1::Resources) {
+    match **r.PWM {
+        Some(ref mut pwm) => pwm.set_channel(1, 1500),
+        None => {}
     }
 }
